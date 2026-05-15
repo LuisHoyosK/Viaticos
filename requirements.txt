@@ -1,0 +1,6 @@
+streamlit==1.32.0
+camelot-py[cv]==0.11.0
+google-generativeai==0.4.1
+opencv-python-headless==4.9.0.80
+pypdf2==3.0.1
+pandas==2.2.1
