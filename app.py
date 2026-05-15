@@ -96,7 +96,7 @@ def compactar_dias(dias):
     while i < n:
         j = i
         while j + 1 < n and dias[j+1] == dias[j] + 1: j += 1
-        grupos.append(f'{dias[i]}al{dias[j]}' if j > i else str(dias[i]))
+        grupos.append(f'{dias[i]} al {dias[j]}' if j > i else str(dias[i]))
         i = j + 1
     return '-'.join(grupos)
 
