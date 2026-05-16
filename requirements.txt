@@ -1,6 +1,6 @@
 streamlit
 camelot-py[cv]
-google-generativeai
+groq
 opencv-python-headless
 pypdf2
 pandas
