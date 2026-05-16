@@ -1,6 +1,6 @@
 import streamlit as st
 import camelot, os, json, tempfile, datetime, re
-import google.generativeai as genai
+from groq import Groq
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURACIÓN SECRETA
@@ -8,12 +8,12 @@ import google.generativeai as genai
 # Streamlit leerá esto de su sección "Secrets" en la nube.
 # Si estás probando localmente, crea un archivo .streamlit/secrets.toml
 try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except KeyError:
     # Fallback por si ejecutas en local y olvidaste el archivo secrets
-    GEMINI_API_KEY = ""
+    GROQ_API_KEY = ""
     
-GEMINI_MODEL = "gemini-2.5-flash"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Funciones Auxiliares y Extracción (Iguales al Notebook)
@@ -186,11 +186,11 @@ st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
   <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos — SIIF Nación</div>
-  <div style="opacity:.75;font-size:12px">Camelot Lattice + Gemini AI · Solo Tablas CSV</div>
+  <div style="opacity:.75;font-size:12px">Camelot Lattice + Groq AI · Solo Tablas CSV</div>
 </div>
 """, unsafe_allow_html=True)
 
-if not GEMINI_API_KEY:
+if not GROQ_API_KEY:
     st.error("⚠️ La API Key no está configurada. Si estás en Streamlit Cloud, agrégala en Configuración > Secrets.")
     st.stop()
 
@@ -212,20 +212,19 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                 st.write("⏳ Extrayendo contenido tabular del PDF con Camelot...")
                 tablas = extract_content(tmp_path)
                 
-                st.write("🤖 Consultando Gemini AI...")
-                genai.configure(api_key=GEMINI_API_KEY.strip())
-
-                model = genai.GenerativeModel(
-                    model_name=GEMINI_MODEL,
-                    generation_config={
-                        "temperature": 0.0,
-                        "response_mime_type": "application/json",
-                    }
-                )
-
+                st.write("🤖 Consultando Groq AI...")
+                client = Groq(api_key=GROQ_API_KEY.strip())
                 prompt = PROMPT_TEMPLATE % (tablas[:30000])
-                response = model.generate_content(prompt)
-                raw = response.text.strip()
+
+                response = client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0,
+                    response_format={"type": "json_object"}
+                )
+                raw = response.choices[0].message.content.strip()
 
                 if raw.startswith('```'):
                     raw = raw.split('```')[1]
