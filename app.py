@@ -38,14 +38,13 @@ Usa la información de las tablas para extraer los siguientes campos con la MAYO
 - consecutivo_cdp: numero del campo "Consecutivo CDP" (seccion CDP de viaticos)
 - solicitud_comision_no: numero de "Solicitud de Comision No."
 - objeto_comision_general: texto completo de la seccion "OBJETO DE LA COMISION"
-- total_solicitud: valor de "Valor total a pagar" en la fila "Totales Solicitud de Comision"
+- total_solicitud: valor de "Valor total a pagar" en la fila "Totales Solicitud de Comision" (borra lo ultimos 2 ceros decimales)
 - comisionados: lista de personas. Por cada persona:
   - nombre: nombre completo (columna Nombre de la tabla)
   - dias_comision: lista de fechas inicial y final (por cada fila de la tabla). Si hay varias filas por persona, añade un item a la lista por cada fila.
     Ejemplo si hay una fila: [{"fi": "2026-05-15", "ff": "2026-05-15"}]
     Ejemplo si hay dos filas: [{"fi": "2026-05-19", "ff": "2026-05-20"}, {"fi": "2026-05-26", "ff": "2026-05-27"}]
-  - municipios_destino: lista de municipios destino tal como aparecen en la tabla, si dice MUNICIPIO - lA CORDOBA reemplazalo por LA APARTADA.
-  - valor_total_pagar: valor total a pagar (seguido de gastos de viaje) (quita los 2 ceros decimales al final)
+  - municipios_destino: lista de municipios destino. Si el municipio excede los 7 caracteres abrévialo. Ejemplo: si dice 'MUNICIPIO - lA CORDOBA' reemplázalo por 'La Apat.'.
   - objeto: objeto especifico si aparece en la tabla (Objeto de la Comision por Tercero)
 
 REGLAS IMPORTANTES:
@@ -65,7 +64,6 @@ JSON esperado:
           {"fi": "YYYY-MM-DD", "ff": "YYYY-MM-DD"}
       ],
       "municipios_destino": ["CORDOBA / AYAPEL"],
-      "valor_total_pagar": "string",
       "objeto": "string o null"
     }
   ]
