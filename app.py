@@ -45,7 +45,7 @@ Usa la información de las tablas para extraer los siguientes campos con la MAYO
     Ejemplo si hay una fila: [{"fi": "2026-05-15", "ff": "2026-05-15"}]
     Ejemplo si hay dos filas: [{"fi": "2026-05-19", "ff": "2026-05-20"}, {"fi": "2026-05-26", "ff": "2026-05-27"}]
   - municipios_destino: lista de municipios destino tal como aparecen en la tabla, si dice MUNICIPIO - lA CORDOBA reemplazalo por LA APARTADA.
-  - valor_total_pagar: valor total a pagar de esa persona (quita los 2 ceros decimales al final)
+  - valor_total_pagar: valor total a pagar (seguido de gastos de viaje) (quita los 2 ceros decimales al final)
   - objeto: objeto especifico si aparece en la tabla (Objeto de la Comision por Tercero)
 
 REGLAS IMPORTANTES:
