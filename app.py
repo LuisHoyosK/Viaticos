@@ -9,7 +9,7 @@ def get_secret(key):
 GROQ_API_KEY   = get_secret("GROQ_API_KEY")
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 GROQ_MODEL   = "llama-3.3-70b-versatile"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 # ─────────────────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIACIONES DE MUNICIPIOS
 # ─────────────────────────────────────────────────────────────────────────────
