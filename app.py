@@ -23,7 +23,7 @@ MUNICIPIO_ABREV = {
     "CHINU": "Chnú.", "CHINÚ": "Chnú.",
     "CIENAGA DE ORO": "Cg.Oro.", "CIÉNAGA DE ORO": "Cg.Oro.",
     "COTORRA": "Ctrra.",
-    "LA APARTADA": "L.Aprt.",
+    "MUNICIPIO - LA - - CORDOBA": "L.Aprt.",
     "LORICA": "Lrca.",
     "LOS CORDOBAS": "L.Cdbas.", "LOS CÓRDOBAS": "L.Cdbas.",
     "MOMIL": "Mml.",
@@ -68,7 +68,7 @@ Extrae con MÁXIMA PRECISIÓN:
 1. consecutivo_cdp: número del campo "Consecutivo CDP" (sección CDP de viáticos)
 2. solicitud_comision_no: número de "Solicitud de Comisión No."
 3. objeto_comision_general: texto de la sección "OBJETO DE LA COMISIÓN" (fuera de la tabla de comisionados)
-4. total_solicitud: valor de "Valor total a pagar" que aparece en la FILA "Totales Solicitud de Comisión"
+4. total_solicitud: valor de "Valor total a pagar" que aparece en la FILA "Totales Solicitud de Comisión" (borra los 2 ultimos ceros)
 5. comisionados: lista de personas DE LA TABLA. Por cada persona extrae SOLO:
    - nombre: nombre completo (columna Nombre)
    - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. Si hay varias filas para la misma persona, un item por fila.
