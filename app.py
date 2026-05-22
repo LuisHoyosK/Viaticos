@@ -38,13 +38,13 @@ Usa la información de las tablas para extraer los siguientes campos con la MAYO
 - consecutivo_cdp: numero del campo "Consecutivo CDP" (seccion CDP de viaticos) normalmente son 4 dijitos y usualmente empieza por 2
 - solicitud_comision_no: numero de "Solicitud de Comision No."
 - objeto_comision_general: texto completo de la seccion "OBJETO DE LA COMISION"
-- total_solicitud: valor de "Valor total a pagar" en la fila "Totales Solicitud de Comision" (borra lo ultimos 2 ceros decimales), de todos los valores, normalmente es el segundo mas alto
+- total_solicitud: 3er valor en la fila "Totales Solicitud de Comision" (borra lo ultimos 2 ceros decimales), de todos los valores, normalmente es el segundo mas alto
 - comisionados: lista de personas. Por cada persona:
   - nombre: nombre completo (columna Nombre de la tabla)
   - dias_comision: lista de fechas inicial y final (por cada fila de la tabla). Si hay varias filas por persona, añade un item a la lista por cada fila.
     Ejemplo si hay una fila: [{"fi": "2026-05-15", "ff": "2026-05-15"}]
     Ejemplo si hay dos filas: [{"fi": "2026-05-19", "ff": "2026-05-20"}, {"fi": "2026-05-26", "ff": "2026-05-27"}]
-  - municipios_destino: lista de municipios destino. (si dice MUNICIPIO - lA CORDOBA reemplazalo por LA APARTADA) agrega una abreviatura para cada municipio que no exceda los 7 caracteres.
+  - municipios_destino: lista de municipios destino. (si dice MUNICIPIO - lA CORDOBA reemplazalo por LA APARTADA) agrega abreviatura por contracción, consonantes representativas de cada municipio.
   - objeto: objeto especifico si aparece en la tabla (Objeto de la Comision por Tercero)
 
 REGLAS IMPORTANTES:
