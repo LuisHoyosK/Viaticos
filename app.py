@@ -68,7 +68,7 @@ Extrae con MÁXIMA PRECISIÓN:
 1. consecutivo_cdp: número del campo "Consecutivo CDP" (sección CDP de viáticos)
 2. solicitud_comision_no: número de "Solicitud de Comisión No."
 3. objeto_comision_general: texto de la sección "OBJETO DE LA COMISIÓN" (fuera de la tabla de comisionados)
-4. total_solicitud: valor de "Valor total a pagar" que aparece en la FILA "Totales Solicitud de Comisión" (borra los 2 ultimos ceros) (el valor aparece 2 veces en todo el documento)
+4. total_solicitud: valor de "Valor total a pagar" que aparece en la FILA "Totales Solicitud de Comisión" (borra los 2 ultimos ceros) (de todo el archivo, es el segundo valor mas alto)
 5. comisionados: lista de personas DE LA TABLA. Por cada persona extrae SOLO:
    - nombre: nombre completo (columna Nombre)
    - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. Si hay varias filas para la misma persona, un item por fila.
@@ -116,7 +116,11 @@ def compactar_dias(dias):
     while i < n:
         j = i
         while j + 1 < n and dias[j+1] == dias[j] + 1: j += 1
-        grupos.append(f'{dias[i]} al {dias[j]}' if j > i else str(dias[i]))
+        if j > i + 1:          # 3+ días consecutivos → rango
+            grupos.append(f'{dias[i]} al {dias[j]}')
+        else:                   # 1 o 2 días → listar individualmente
+            for k in range(i, j + 1):
+                grupos.append(str(dias[k]))
         i = j + 1
     return '-'.join(grupos)
 def dias_de_rango(fi_str, ff_str):
