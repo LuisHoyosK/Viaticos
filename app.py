@@ -14,7 +14,7 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # DICCIONARIO DE ABREVIACIONES DE MUNICIPIOS
 # ─────────────────────────────────────────────────────────────────────────────
 MUNICIPIO_ABREV = {
-    "MONTERIA": "Mtría.", "MONTERÍA": "Mtría.",
+    "MONTERIA": "", "MONTERÍA": "",
     "AYAPEL": "Aypl.",
     "BUENAVISTA": "Bvst.",
     "CANALETE": "Cnlte.",
