@@ -51,7 +51,7 @@ MUNICIPIO_ABREV = {
 def extract_content(pdf_path):
     tablas_csv = []
     try:
-        tables = camelot.read_pdf(pdf_path, pages='all', flavor='lattice')
+        tables = camelot.read_pdf(pdf_path, pages='all', flavor='stream')
         for i, tbl in enumerate(tables):
             csv_str = tbl.df.to_csv(index=False)
             tablas_csv.append(f'--- TABLA {i+1} ---\n{csv_str}')
@@ -63,20 +63,23 @@ def extract_content(pdf_path):
 # ─────────────────────────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """\
 Eres un experto extrayendo datos de documentos SIIF Nación de Colombia.
-Se te proporcionan TABLAS EN CSV (extraídas con camelot lattice) del PDF.
-Extrae con MÁXIMA PRECISIÓN:
-1. consecutivo_cdp: número del campo "Consecutivo CDP" (sección CDP de viáticos)
-2. solicitud_comision_no: número de "Solicitud de Comisión No."
-3. objeto_comision_general: texto de la sección "OBJETO DE LA COMISIÓN" (fuera de la tabla de comisionados)
-4. total_solicitud: valor de "Valor total a pagar" que aparece en la FILA "Totales Solicitud de Comisión" (borra los 2 ultimos ceros) (de todo el archivo, es el segundo valor mas alto)
-5. comisionados: lista de personas DE LA TABLA. Por cada persona extrae SOLO:
-   - nombre: nombre completo (columna Nombre)
-   - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. Si hay varias filas para la misma persona, un item por fila.
-   - municipios_destino: lista de municipios destino tal cual aparecen
+Se te proporcionan TABLAS EN CSV (extraídas con camelot stream) del PDF.
+Extrae con MÁXIMA PRECISIÓN siguiendo estrictamente estas reglas posicionales:
+
+1. consecutivo_cdp: número de 4 dígitos. Se encuentra típicamente cerca (antes o después) de la frase "CDP de viáticos" o "Consecutivo CDP". 
+2. solicitud_comision_no: número de 5 dígitos (generalmente al principio). Se encuentra cerca de "Comisión Servicio al Interior del País" o "Solicitud de Comisión No." 
+3. objeto_comision_general: se encuentra COMPLETO justo después de la palabra "OBJETO DE LA COMISIÓN".
+4. total_solicitud: Es el TERCER valor después de la palabra "Totales Solicitud de Comisión". Entregar el valor numérico limpio, es decir, ELIMINA los dos ceros y la coma decimal final, y manténlo solo como número.
+5. comisionados: lista de personas en la tabla.
+   - nombre: El nombre a menudo está ROTO en varias celdas/líneas, pero SIEMPRE está cerca de las palabras "CONTRATIS" y "TA" (que juntas forman "CONTRATISTA"). Debes unir el nombre de la persona ignorando "CONTRATIS", "TA" y "CC:".
+   - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. (Una entrada por cada fila de días/destinos del comisionado).
+   - municipios_destino: lista de municipios destino tal cual aparecen.
+
 REGLAS:
-- Un comisionado puede tener MÚLTIPLES filas (una por día o tramo)
-- NO extraer valor_total_pagar ni objeto por comisionado (ya están fuera de la tabla)
-- Devuelve ÚNICAMENTE JSON válido
+- Un comisionado puede tener MÚLTIPLES filas de fechas (una por día o tramo).
+- NO extraer valor_total_pagar ni objeto por comisionado (ya están cubiertos a nivel general).
+- Devuelve ÚNICAMENTE JSON válido.
+
 JSON esperado:
 {
   "consecutivo_cdp": "string",
@@ -224,8 +227,7 @@ st.set_page_config(page_title="Extractor Viáticos", page_icon="📄", layout="c
 st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
-  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos — SIIF Nación</div>
-  <div style="opacity:.75;font-size:12px">Camelot Lattice + IA (Grok / Gemini) · Solo Tablas CSV</div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos</div>
 </div>
 """, unsafe_allow_html=True)
 # Selector de motor IA
