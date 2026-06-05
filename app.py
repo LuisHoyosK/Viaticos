@@ -48,10 +48,10 @@ MUNICIPIO_ABREV = {
 # ─────────────────────────────────────────────────────────────────────────────
 # EXTRACCIÓN DE TABLAS
 # ─────────────────────────────────────────────────────────────────────────────
-def extract_content(pdf_path):
+def extract_content(pdf_path, flavor='stream'):
     tablas_csv = []
     try:
-        tables = camelot.read_pdf(pdf_path, pages='all', flavor='stream')
+        tables = camelot.read_pdf(pdf_path, pages='all', flavor=flavor)
         for i, tbl in enumerate(tables):
             csv_str = tbl.df.to_csv(index=False)
             tablas_csv.append(f'--- TABLA {i+1} ---\n{csv_str}')
@@ -63,14 +63,14 @@ def extract_content(pdf_path):
 # ─────────────────────────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """\
 Eres un experto extrayendo datos de documentos SIIF Nación de Colombia.
-Se te proporcionan TABLAS EN CSV (extraídas con camelot stream) del PDF.
+Se te proporciona el documento en formato {formato_texto}.
 Extrae con MÁXIMA PRECISIÓN siguiendo estrictamente estas reglas posicionales:
 
 1. consecutivo_cdp: número de 4 dígitos. Se encuentra típicamente cerca (antes o después) de la frase "CDP de viáticos" o "Consecutivo CDP". 
 2. solicitud_comision_no: número de 5 dígitos (generalmente al principio). Se encuentra cerca de "Comisión Servicio al Interior del País" o "Solicitud de Comisión No." 
 3. objeto_comision_general: se encuentra COMPLETO justo después de la palabra "OBJETO DE LA COMISIÓN".
-4. total_solicitud: Es el TERCER valor después de la palabra "Totales Solicitud de Comisión". Entregar el valor numérico limpio, es decir, ELIMINA los dos ceros y la coma decimal final, y manténlo solo como número.
-5. comisionados: lista de personas en la tabla.
+4. total_solicitud: Es el valor total a pagar de la solicitud. Si estás leyendo tablas, es el TERCER valor después de la palabra "Totales Solicitud de Comisión". Entregar el valor numérico limpio, es decir, ELIMINA los dos ceros y la coma decimal final, y manténlo solo como número.
+5. comisionados: lista de personas en el documento.
    - nombre: El nombre a menudo está ROTO en varias celdas/líneas, pero SIEMPRE está cerca de las palabras "CONTRATIS" y "TA" (que juntas forman "CONTRATISTA"). Debes unir el nombre de la persona ignorando "CONTRATIS", "TA" y "CC:".
    - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. (Una entrada por cada fila de días/destinos del comisionado).
    - municipios_destino: lista de municipios destino tal cual aparecen.
@@ -95,7 +95,7 @@ JSON esperado:
   ]
 }
 ════════════════════════════════
-TABLAS CSV:
+DOCUMENTO ({formato_texto}):
 %s
 """
 # ─────────────────────────────────────────────────────────────────────────────
@@ -214,6 +214,26 @@ def call_gemini(prompt):
         )
     )
     return resp.text.strip()
+
+def call_gemini_native(prompt, pdf_path):
+    import google.generativeai as genai
+    genai.configure(api_key=GEMINI_API_KEY.strip())
+    model = genai.GenerativeModel(GEMINI_MODEL)
+    
+    # Subir archivo directamente a la API de Gemini
+    uploaded_file = genai.upload_file(pdf_path, mime_type="application/pdf")
+    try:
+        resp = model.generate_content(
+            [prompt, uploaded_file],
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.0
+            )
+        )
+        return resp.text.strip()
+    finally:
+        # Importante borrar el archivo para no agotar la cuota de almacenamiento
+        uploaded_file.delete()
 def parse_ai_response(raw):
     """Limpia bloques ```json ... ``` y parsea JSON."""
     if raw.startswith('```'):
@@ -227,24 +247,41 @@ st.set_page_config(page_title="Extractor Viáticos", page_icon="📄", layout="c
 st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
-  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos</div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos </div>
+  
 </div>
 """, unsafe_allow_html=True)
-# Selector de motor IA
+
 motor = st.radio(
     "🤖 Motor de IA",
     ["Grok (Groq)", "Gemini (Google)"],
     horizontal=True,
     help="Elige qué modelo procesará el documento"
 )
-# Validar API Key según motor elegido
+
+metodo_extraccion = st.radio(
+    "📥 Método de Lectura del PDF",
+    [
+        "Tablas CSV (Camelot Stream)", 
+        "Tablas CSV (Camelot Lattice)", 
+        "Visión Nativa Directa (Solo Gemini)"
+    ],
+    help="Si las tablas CSV fallan, intenta con la Visión Nativa Directa."
+)
+
+if metodo_extraccion == "Visión Nativa Directa (Solo Gemini)" and motor == "Grok (Groq)":
+    st.error("⚠️ La Visión Nativa Directa de PDFs solo está soportada por Gemini. Por favor cambia el Motor de IA a Gemini, o cambia el método de extracción.")
+    st.stop()
+
 if motor == "Grok (Groq)" and not GROQ_API_KEY:
     st.error("⚠️ GROQ_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     st.stop()
 elif motor == "Gemini (Google)" and not GEMINI_API_KEY:
     st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     st.stop()
+
 uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'])
+
 if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
     if uploaded_file is None:
         st.warning("⚠️ Selecciona un PDF primero.")
@@ -255,18 +292,36 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
             try:
-                st.write("⏳ Extrayendo tablas del PDF con Camelot...")
-                tablas = extract_content(tmp_path)
-                prompt = PROMPT_TEMPLATE % (tablas[:30000])
-                if motor == "Grok (Groq)":
-                    st.write("🤖 Consultando Grok (Groq)...")
-                    raw = call_groq(prompt)
+                if metodo_extraccion == "Visión Nativa Directa (Solo Gemini)":
+                    st.write("🤖 Consultando Gemini (Visión Nativa Directa)...")
+                    # Para visión nativa no extraemos texto localmente
+                    # Modificamos el prompt para que sepa que le estamos pasando un archivo nativo
+                    prompt_format = PROMPT_TEMPLATE.replace("{formato_texto}", "PDF NATIVO") % ""
+                    raw = call_gemini_native(prompt_format, tmp_path)
+                
                 else:
-                    st.write("🤖 Consultando Gemini (Google)...")
-                    raw = call_gemini(prompt)
+                    if metodo_extraccion == "Tablas CSV (Camelot Stream)":
+                        st.write("⏳ Extrayendo tablas del PDF con Camelot Stream...")
+                        texto_extraido = extract_content(tmp_path, flavor='stream')
+                        formato = "TABLAS CSV (STREAM)"
+                    elif metodo_extraccion == "Tablas CSV (Camelot Lattice)":
+                        st.write("⏳ Extrayendo tablas del PDF con Camelot Lattice...")
+                        texto_extraido = extract_content(tmp_path, flavor='lattice')
+                        formato = "TABLAS CSV (LATTICE)"
+
+                    prompt = PROMPT_TEMPLATE.replace("{formato_texto}", formato) % (texto_extraido[:30000])
+                    
+                    if motor == "Grok (Groq)":
+                        st.write("🤖 Consultando Grok (Groq)...")
+                        raw = call_groq(prompt)
+                    else:
+                        st.write("🤖 Consultando Gemini (Google)...")
+                        raw = call_gemini(prompt)
+
                 data = parse_ai_response(raw)
                 texto_final = build_text(data)
                 status.update(label="¡Extracción completada!", state="complete", expanded=False)
+
             except Exception as e:
                 status.update(label="Ocurrió un error", state="error")
                 st.error(f"❌ Error: {str(e)}")
