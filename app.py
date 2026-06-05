@@ -269,7 +269,7 @@ metodo_extraccion = st.radio(
     help="Si las tablas CSV fallan, intenta con El Documento Directo."
 )
 
-if metodo_extraccion == "Documento Directo (Solo Gemini)" and motor == "Grok (Groq)":
+if metodo_extraccion == "Documento Directo (Solo Gemini)" and motor == "Grok ":
     st.error("⚠️ El Documento Directo de PDFs solo está soportada por Gemini. Por favor cambia el Motor de IA a Gemini, o cambia el método de extracción.")
     st.stop()
 
