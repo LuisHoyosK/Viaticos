@@ -202,10 +202,10 @@ def call_groq(prompt):
         response_format={"type": "json_object"}
     )
     return resp.choices[0].message.content.strip()
-def call_gemini(prompt):
+def call_gemini(prompt, model_name):
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY.strip())
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    model = genai.GenerativeModel(model_name)
     resp = model.generate_content(
         prompt,
         generation_config=genai.GenerationConfig(
@@ -215,10 +215,10 @@ def call_gemini(prompt):
     )
     return resp.text.strip()
 
-def call_gemini_native(prompt, pdf_path):
+def call_gemini_native(prompt, pdf_path, model_name):
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY.strip())
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    model = genai.GenerativeModel(model_name)
     
     # Subir archivo directamente a la API de Gemini
     uploaded_file = genai.upload_file(pdf_path, mime_type="application/pdf")
@@ -248,13 +248,12 @@ st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
   <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos </div>
-  
 </div>
 """, unsafe_allow_html=True)
 
 motor = st.radio(
     "🤖 Motor de IA",
-    ["Grok ", "Gemini "],
+    ["Grok", "Gemini 2.5", "Gemini 3.5"],
     horizontal=True,
     help="Elige qué modelo procesará el documento"
 )
@@ -262,21 +261,21 @@ motor = st.radio(
 metodo_extraccion = st.radio(
     "📥 Método de Lectura del PDF",
     [
-        "Extracción 1 (más eficaz)", 
-        "Extracción 2 (más eficiente)", 
-        "Documento Directo (Solo Gemini)"
+        "Extracción 1", 
+        "Extracción 2", 
+        "Documento Directo"
     ],
-    help="Si las tablas CSV fallan, intenta con El Documento Directo."
+    help="Opciones de extracción de datos."
 )
 
-if metodo_extraccion == "Documento Directo (Solo Gemini)" and motor == "Grok ":
-    st.error("⚠️ El Documento Directo de PDFs solo está soportada por Gemini. Por favor cambia el Motor de IA a Gemini, o cambia el método de extracción.")
+if metodo_extraccion == "Documento Directo" and motor == "Grok":
+    st.error("⚠️ El Documento Directo solo está soportado por Gemini. Por favor cambia el Motor de IA a Gemini, o cambia el método de extracción.")
     st.stop()
 
-if motor == "Grok " and not GROQ_API_KEY:
+if motor == "Grok" and not GROQ_API_KEY:
     st.error("⚠️ GROQ_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     st.stop()
-elif motor == "Gemini " and not GEMINI_API_KEY:
+elif "Gemini" in motor and not GEMINI_API_KEY:
     st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     st.stop()
 
@@ -292,31 +291,33 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
             try:
-                if metodo_extraccion == "Documento Directo (Solo Gemini)":
+                if metodo_extraccion == "Documento Directo":
                     st.write("🤖 Consultando Gemini (Documento Directo)...")
                     # Para visión nativa no extraemos texto localmente
                     # Modificamos el prompt para que sepa que le estamos pasando un archivo nativo
                     prompt_format = PROMPT_TEMPLATE.replace("{formato_texto}", "PDF NATIVO") % ""
-                    raw = call_gemini_native(prompt_format, tmp_path)
+                    model_str = "gemini-3.5-flash" if motor == "Gemini 3.5" else "gemini-2.5-flash"
+                    raw = call_gemini_native(prompt_format, tmp_path, model_str)
                 
                 else:
-                    if metodo_extraccion == "Extracción 1 (más eficaz)":
-                        st.write("⏳ Extrayendo tablas del PDF con Camelot Stream...")
+                    if metodo_extraccion == "Extracción 1":
+                        st.write("⏳ Procesando Extracción 1...")
                         texto_extraido = extract_content(tmp_path, flavor='stream')
                         formato = "TABLAS CSV (STREAM)"
-                    elif metodo_extraccion == "Extracción 2 (más eficiente)":
-                        st.write("⏳ Extrayendo tablas del PDF con Camelot Lattice...")
+                    elif metodo_extraccion == "Extracción 2":
+                        st.write("⏳ Procesando Extracción 2...")
                         texto_extraido = extract_content(tmp_path, flavor='lattice')
                         formato = "TABLAS CSV (LATTICE)"
 
                     prompt = PROMPT_TEMPLATE.replace("{formato_texto}", formato) % (texto_extraido[:30000])
                     
-                    if motor == "Grok ":
-                        st.write("🤖 Consultando Grok (Groq)...")
+                    if motor == "Grok":
+                        st.write("🤖 Consultando Grok...")
                         raw = call_groq(prompt)
                     else:
-                        st.write("🤖 Consultando Gemini (Google)...")
-                        raw = call_gemini(prompt)
+                        st.write(f"🤖 Consultando {motor}...")
+                        model_str = "gemini-3.5-flash" if motor == "Gemini 3.5" else "gemini-2.5-flash"
+                        raw = call_gemini(prompt, model_str)
 
                 data = parse_ai_response(raw)
                 texto_final = build_text(data)
