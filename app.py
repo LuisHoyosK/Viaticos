@@ -311,7 +311,7 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
 
                     prompt = PROMPT_TEMPLATE.replace("{formato_texto}", formato) % (texto_extraido[:30000])
                     
-                    if motor == "Grok (Groq)":
+                    if motor == "Grok ":
                         st.write("🤖 Consultando Grok (Groq)...")
                         raw = call_groq(prompt)
                     else:
