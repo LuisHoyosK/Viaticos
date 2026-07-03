@@ -24,7 +24,7 @@ MUNICIPIO_ABREV = {
     "CHINU": "Chnú.", "CHINÚ": "Chnú.",
     "CIENAGA DE ORO": "Cg.Oro.", "CIÉNAGA DE ORO": "Cg.Oro.",
     "COTORRA": "Ctrra.",
-    "MUNICIPIO - LA - - CORDOBA": "L.Aprt.",
+    "MUNICIPIO - LA - - CORDOBA": "L.Aprt.", "MUNICIPIO-LA CORDOBA": "L.Aprt.",
     "LORICA": "Lrca.",
     "LOS CORDOBAS": "L.Cdbas.", "LOS CÓRDOBAS": "L.Cdbas.",
     "MOMIL": "Mml.",
