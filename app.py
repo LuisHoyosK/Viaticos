@@ -1,15 +1,16 @@
 import streamlit as st
-import camelot, os, json, tempfile, datetime, re
+import os, json, tempfile, datetime, re
+import google.generativeai as genai
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURACIÓN — API Keys (Streamlit Secrets)
 # ─────────────────────────────────────────────────────────────────────────────
 def get_secret(key):
     try: return st.secrets[key]
     except KeyError: return ""
-GROQ_API_KEY   = get_secret("GROQ_API_KEY")
+
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
-GROQ_MODEL   = "llama-3.3-70b-versatile"
-GEMINI_MODEL = "gemini-2.5-flash"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIACIONES DE MUNICIPIOS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,42 +46,31 @@ MUNICIPIO_ABREV = {
     "TUCHIN": "Tchn.", "TUCHÍN": "Tchn.",
     "VALENCIA": "Vlnca.",
 }
+
 # ─────────────────────────────────────────────────────────────────────────────
-# EXTRACCIÓN DE TABLAS
-# ─────────────────────────────────────────────────────────────────────────────
-def extract_content(pdf_path, flavor='stream'):
-    tablas_csv = []
-    try:
-        tables = camelot.read_pdf(pdf_path, pages='all', flavor=flavor)
-        for i, tbl in enumerate(tables):
-            csv_str = tbl.df.to_csv(index=False)
-            tablas_csv.append(f'--- TABLA {i+1} ---\n{csv_str}')
-    except Exception as e:
-        tablas_csv.append(f'Error camelot: {e}')
-    return '\n'.join(tablas_csv)
-# ─────────────────────────────────────────────────────────────────────────────
-# PROMPT (sin redundancias — tabla solo: nombre, días, municipios)
+# PROMPT OPTIMIZADO PARA EXTRACCIÓN NATIVA
 # ─────────────────────────────────────────────────────────────────────────────
 PROMPT_TEMPLATE = """\
-Eres un experto extrayendo datos de documentos SIIF Nación de Colombia.
-Se te proporciona el documento en formato {formato_texto}.
-Extrae con MÁXIMA PRECISIÓN siguiendo estrictamente estas reglas posicionales:
+Eres un experto en auditoría fiscal y extracción de datos estructurados desde documentos oficiales del SIIF Nación de Colombia.
+Analiza visual y textualmente el documento PDF proporcionado para extraer la información exacta y estructurarla en el formato JSON requerido.
 
-1. consecutivo_cdp: número de 4 dígitos. Se encuentra típicamente cerca (antes o después) de la frase "CDP de viáticos" o "Consecutivo CDP". 
-2. solicitud_comision_no: número de 5 dígitos (generalmente al principio). Se encuentra cerca de "Comisión Servicio al Interior del País" o "Solicitud de Comisión No." 
-3. objeto_comision_general: se encuentra COMPLETO justo después de la palabra "OBJETO DE LA COMISIÓN".
-4. total_solicitud: Es el valor total a pagar de la solicitud. Si estás leyendo tablas, es el TERCER valor después de la palabra "Totales Solicitud de Comisión". Entregar el valor numérico limpio, es decir, ELIMINA los dos ceros y la coma decimal final, y manténlo solo como número.
-5. comisionados: lista de personas en el documento.
-   - nombre: El nombre a menudo está ROTO en varias celdas/líneas, pero SIEMPRE está cerca de las palabras "CONTRATIS" y "TA" (que juntas forman "CONTRATISTA"). Debes unir el nombre de la persona ignorando "CONTRATIS", "TA" y "CC:".
-   - dias_comision: lista de rangos {fi, ff} en formato YYYY-MM-DD. (Una entrada por cada fila de días/destinos del comisionado).
-   - municipios_destino: lista de municipios destino tal cual aparecen.
+### INSTRUCCIONES DE EXTRACCIÓN:
 
-REGLAS:
-- Un comisionado puede tener MÚLTIPLES filas de fechas (una por día o tramo).
-- NO extraer valor_total_pagar ni objeto por comisionado (ya están cubiertos a nivel general).
-- Devuelve ÚNICAMENTE JSON válido.
+1. **consecutivo_cdp**: Busca el número de 4 dígitos correspondiente al Consecutivo del Certificado de Disponibilidad Presupuestal (CDP). Suele encontrarse bajo o al lado de la etiqueta "Consecutivo CDP" o en la sección de viáticos.
+2. **solicitud_comision_no**: Identifica el número de 5 dígitos que representa la "Solicitud de Comisión No." en el encabezado del trámite.
+3. **objeto_comision_general**: Extrae el texto completo que describe el propósito de la comisión. Se ubica típicamente en la celda o sección final rotulada como "OBJETO DE LA COMISIÓN" o "Objeto de la Comisión por Tercero". No lo trunques.
+4. **total_solicitud**: Localiza el valor total acumulado a pagar por la solicitud de comisión (asociado a la sección de "Totales Solicitud de Comisión"). Devuelve el valor numérico como una cadena limpia (ej. si dice "1.414.740,00", devuélvelo como "1414740").
 
-JSON esperado:
+5. **comisionados**: Genera una lista con las personas asignadas a la comisión. Para cada comisionado:
+   - **nombre**: Reconstruye el nombre completo de la persona de forma legible y unificada (por ejemplo, "LILIANA MARIA SIERRA HERNANDEZ"). Ignora cortes de línea de la tabla o palabras de cargo adyacentes como "CONTRATISTA".
+   - **dias_comision**: Por cada fila de tramo/itinerario asignada a ese comisionado, extrae la fecha inicial (`fi`) y la fecha final (`ff`) en formato estricto `YYYY-MM-DD`. Debe haber un objeto de rango por cada tramo listado.
+   - **municipios_destino**: Extrae una lista de los municipios o ciudades destino de los tramos (ej. "AYAPEL", "PLANETA RICA"). Limpia el nombre omitiendo el departamento si viene en formato "CORDOBA/AYAPEL" o "CORDOBA/ MONTERIA".
+
+### REGLAS DE CONTROL:
+- Un comisionado puede tener múltiples filas (tramos) que representan diferentes fechas y destinos en el mismo documento. Agrúpalas todas bajo el mismo comisionado.
+- Devuelve **ÚNICAMENTE** el objeto JSON, sin código Markdown ni texto explicativo adicional.
+
+### JSON ESPERADO:
 {
   "consecutivo_cdp": "string",
   "solicitud_comision_no": "string",
@@ -89,22 +79,24 @@ JSON esperado:
   "comisionados": [
     {
       "nombre": "string",
-      "dias_comision": [{"fi": "YYYY-MM-DD", "ff": "YYYY-MM-DD"}],
+      "dias_comision": [
+        {"fi": "YYYY-MM-DD", "ff": "YYYY-MM-DD"}
+      ],
       "municipios_destino": ["string"]
     }
   ]
 }
-════════════════════════════════
-DOCUMENTO ({formato_texto}):
-%s
 """
+
 # ─────────────────────────────────────────────────────────────────────────────
 # FUNCIONES AUXILIARES
 # ─────────────────────────────────────────────────────────────────────────────
 MESES = ['','ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
          'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']
+
 def clean(v): return ' '.join(str(v).split()) if v else ''
 def raw_num(v): return re.sub(r'[^\d]', '', str(v)) if v else ''
+
 def parse_date(s):
     m = re.search(r'(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4}|\d{4}/\d{2}/\d{2})', clean(s))
     if not m: return None
@@ -113,6 +105,7 @@ def parse_date(s):
         try: return datetime.datetime.strptime(s, fmt)
         except: pass
     return None
+
 def compactar_dias(dias):
     if not dias: return ''
     grupos, i, n = [], 0, len(dias)
@@ -126,6 +119,7 @@ def compactar_dias(dias):
                 grupos.append(str(dias[k]))
         i = j + 1
     return '-'.join(grupos)
+
 def dias_de_rango(fi_str, ff_str):
     fi = parse_date(fi_str)
     ff = parse_date(ff_str)
@@ -135,21 +129,22 @@ def dias_de_rango(fi_str, ff_str):
         result.append((cur.day, cur.month))
         cur += datetime.timedelta(days=1)
     return result
+
 def abreviar_municipio(mpio):
     """Busca el municipio en el diccionario de abreviaciones.
     Si no lo encuentra, devuelve el nombre limpio en mayúsculas."""
     if not mpio: return ''
-    # Limpiar: quitar "CORDOBA / ", "CÓRDOBA / ", etc.
     parts = re.split(r'[/\\|]', mpio)
     nombre = parts[-1].strip().upper()
-    # Buscar en el diccionario (con y sin tildes)
     return MUNICIPIO_ABREV.get(nombre, nombre)
+
 def build_text(data):
     cdp   = data.get('consecutivo_cdp') or '—'
     sol   = data.get('solicitud_comision_no') or '—'
     obj_g = (data.get('objeto_comision_general') or '').strip()
     total = raw_num(data.get('total_solicitud'))
     lines = [str(cdp), '']
+    
     for c in data.get('comisionados') or []:
         # Días
         dias_meses_raw = []
@@ -171,6 +166,7 @@ def build_text(data):
                 partes = [compactar_dias(sorted(dias)) + ' ' + MESES[mes]
                           for mes, dias in sorted(grupos.items())]
                 dias_str = ' / '.join(partes)
+                
         # Municipios con abreviación
         mpios_raw = c.get('municipios_destino') or []
         mpios_clean = []
@@ -179,6 +175,7 @@ def build_text(data):
             if mp and mp not in mpios_clean:
                 mpios_clean.append(mp)
         mpio_str = ' - '.join(mpios_clean)
+        
         nombre = (c.get('nombre') or '').upper()
         p = [f'VIA FORM {sol}']
         if dias_str and mes_str: p.append(f'DIAS {dias_str} {mes_str}')
@@ -186,37 +183,16 @@ def build_text(data):
         if mpio_str:             p.append(f'MPIO {mpio_str}')
         if obj_g:                p.append(f'OBJ  {obj_g}')
         lines += [' '.join(p), '', f'{nombre}  {total}']
+        
     if not data.get('comisionados'):
         lines += [f'VIA FORM {sol} OBJ  {obj_g}', '', str(total)]
+        
     return '\n'.join(lines)
-# ─────────────────────────────────────────────────────────────────────────────
-# LLAMADAS A IA (Grok vía Groq / Gemini)
-# ─────────────────────────────────────────────────────────────────────────────
-def call_groq(prompt):
-    from groq import Groq
-    client = Groq(api_key=GROQ_API_KEY.strip())
-    resp = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        response_format={"type": "json_object"}
-    )
-    return resp.choices[0].message.content.strip()
-def call_gemini(prompt, model_name):
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY.strip())
-    model = genai.GenerativeModel(model_name)
-    resp = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            temperature=0.0
-        )
-    )
-    return resp.text.strip()
 
+# ─────────────────────────────────────────────────────────────────────────────
+# LLAMADAS A GEMINI CON ARCHIVO NATIVO Y FALLBACK DE MODELO
+# ─────────────────────────────────────────────────────────────────────────────
 def call_gemini_native(prompt, pdf_path, model_name):
-    import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY.strip())
     model = genai.GenerativeModel(model_name)
     
@@ -232,104 +208,68 @@ def call_gemini_native(prompt, pdf_path, model_name):
         )
         return resp.text.strip()
     finally:
-        # Importante borrar el archivo para no agotar la cuota de almacenamiento
+        # Borrar el archivo cargado para liberar cuota de almacenamiento
         uploaded_file.delete()
+
 def parse_ai_response(raw):
     """Limpia bloques ```json ... ``` y parsea JSON."""
     if raw.startswith('```'):
         raw = raw.split('```')[1]
         if raw.startswith('json'): raw = raw[4:]
     return json.loads(raw)
+
 # ─────────────────────────────────────────────────────────────────────────────
-# UI STREAMLIT
+# INTERFAZ STREAMLIT
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Extractor Viáticos", page_icon="📄", layout="centered")
+
 st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
-  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos </div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos — SIIF Nación</div>
+  
 </div>
 """, unsafe_allow_html=True)
-
-motor = st.radio(
-    "🤖 Motor de IA",
-    ["Grok", "Gemini 2.5", "Gemini 3.5"],
-    horizontal=True,
-    help="Elige qué modelo procesará el documento"
-)
-
-metodo_extraccion = st.radio(
-    "📥 Método de Lectura del PDF",
-    [
-        "Extracción 1", 
-        "Extracción 2", 
-        "Documento Directo"
-    ],
-    help="Opciones de extracción de datos."
-)
-
-if metodo_extraccion == "Documento Directo" and motor == "Grok":
-    st.error("⚠️ El Documento Directo solo está soportado por Gemini. Por favor cambia el Motor de IA a Gemini, o cambia el método de extracción.")
-    st.stop()
-
-if motor == "Grok" and not GROQ_API_KEY:
-    st.error("⚠️ GROQ_API_KEY no configurada. Agrégala en Configuración > Secrets.")
-    st.stop()
-elif "Gemini" in motor and not GEMINI_API_KEY:
-    st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
-    st.stop()
 
 uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'])
 
 if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
     if uploaded_file is None:
         st.warning("⚠️ Selecciona un PDF primero.")
+    elif not GEMINI_API_KEY:
+        st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     else:
         with st.status("Procesando documento...", expanded=True) as status:
             st.write("⏳ Guardando archivo temporal...")
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
-            try:
-                if metodo_extraccion == "Documento Directo":
-                    st.write("🤖 Consultando Gemini (Documento Directo)...")
-                    # Para visión nativa no extraemos texto localmente
-                    # Modificamos el prompt para que sepa que le estamos pasando un archivo nativo
-                    prompt_format = PROMPT_TEMPLATE.replace("{formato_texto}", "PDF NATIVO") % ""
-                    model_str = "gemini-3.5-flash" if motor == "Gemini 3.5" else "gemini-2.5-flash"
-                    raw = call_gemini_native(prompt_format, tmp_path, model_str)
                 
-                else:
-                    if metodo_extraccion == "Extracción 1":
-                        st.write("⏳ Procesando Extracción 1...")
-                        texto_extraido = extract_content(tmp_path, flavor='stream')
-                        formato = "TABLAS CSV (STREAM)"
-                    elif metodo_extraccion == "Extracción 2":
-                        st.write("⏳ Procesando Extracción 2...")
-                        texto_extraido = extract_content(tmp_path, flavor='lattice')
-                        formato = "TABLAS CSV (LATTICE)"
+            try:
+                raw = None
+                
+                # Intentamos con Gemini 2.5 Flash primero
+                st.write("🤖 Analizando documento con Gemini 2.5 Flash (Modelo Principal)...")
+                try:
+                    raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, "gemini-2.5-flash")
+                except Exception as e25:
+                    st.write(f"⚠️ Límite de consumo o error en Gemini 2.5: {str(e25)}")
+                    st.write("🔄 Reintentando automáticamente con Gemini 3.5 Flash (Modelo de Respaldo)...")
+                    raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, "gemini-3.5-flash")
 
-                    prompt = PROMPT_TEMPLATE.replace("{formato_texto}", formato) % (texto_extraido[:30000])
-                    
-                    if motor == "Grok":
-                        st.write("🤖 Consultando Grok...")
-                        raw = call_groq(prompt)
-                    else:
-                        st.write(f"🤖 Consultando {motor}...")
-                        model_str = "gemini-3.5-flash" if motor == "Gemini 3.5" else "gemini-2.5-flash"
-                        raw = call_gemini(prompt, model_str)
-
+                st.write("🧩 Parsea y construye el resultado final...")
                 data = parse_ai_response(raw)
                 texto_final = build_text(data)
                 status.update(label="¡Extracción completada!", state="complete", expanded=False)
 
             except Exception as e:
-                status.update(label="Ocurrió un error", state="error")
-                st.error(f"❌ Error: {str(e)}")
+                status.update(label="Ocurrió un error en el procesamiento", state="error")
+                st.error(f"❌ Error final: {str(e)}")
                 texto_final = None
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
+                    
         if texto_final:
             st.markdown('<div style="font-family:sans-serif;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📋 Texto listo — Haz clic adentro y presiona Ctrl+A, Ctrl+C para copiar</div>', unsafe_allow_html=True)
             st.text_area("Resultado", value=texto_final, height=300, label_visibility="collapsed")
