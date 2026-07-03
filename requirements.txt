@@ -1,7 +1,2 @@
 streamlit
-camelot-py[cv]
-groq
 google-generativeai
-opencv-python-headless
-pypdf2
-pandas
