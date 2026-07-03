@@ -64,7 +64,7 @@ Analiza visual y textualmente el documento PDF proporcionado para extraer la inf
 5. **comisionados**: Genera una lista con las personas asignadas a la comisión. Para cada comisionado:
    - **nombre**: Reconstruye el nombre completo de la persona de forma legible y unificada (por ejemplo, "LILIANA MARIA SIERRA HERNANDEZ"). Ignora cortes de línea de la tabla o palabras de cargo adyacentes como "CONTRATISTA".
    - **dias_comision**: Por cada fila de tramo/itinerario asignada a ese comisionado, extrae la fecha inicial (`fi`) y la fecha final (`ff`) en formato estricto `YYYY-MM-DD`. Debe haber un objeto de rango por cada tramo listado.
-   - **municipios_destino**: Extrae una lista de los municipios o ciudades destino de los tramos (ej. "AYAPEL", "PLANETA RICA"). Limpia el nombre omitiendo el departamento si viene en formato "CORDOBA/AYAPEL" o "CORDOBA/ MONTERIA".
+   - **municipios_destino**: lista de municipios destino tal cual aparecen.
 
 ### REGLAS DE CONTROL:
 - Un comisionado puede tener múltiples filas (tramos) que representan diferentes fechas y destinos en el mismo documento. Agrúpalas todas bajo el mismo comisionado.
