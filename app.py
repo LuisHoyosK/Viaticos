@@ -247,7 +247,7 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                 
             try:
                 raw = None
-                models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
+                models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
                 st.write("🤖 Analizando documento...")
                 
                 for idx, model_name in enumerate(models):
