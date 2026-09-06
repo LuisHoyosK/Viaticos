@@ -64,7 +64,7 @@ Analiza visual y textualmente el documento PDF proporcionado para extraer la inf
 5. **comisionados**: Genera una lista con las personas asignadas a la comisión. Para cada comisionado:
    - **nombre**: Reconstruye el nombre completo de la persona de forma legible y unificada (por ejemplo, "LILIANA MARIA SIERRA HERNANDEZ"). Ignora cortes de línea de la tabla o palabras de cargo adyacentes como "CONTRATISTA".
    - **dias_comision**: Por cada fila de tramo/itinerario asignada a ese comisionado, extrae la fecha inicial (`fi`) y la fecha final (`ff`) en formato estricto `YYYY-MM-DD`. Debe haber un objeto de rango por cada tramo listado.
-   - **municipios_destino**: lista de municipios destino tal cual aparecen.
+   - **municipios_destino**: Extrae una lista de los municipios o ciudades destino de los tramos (ej. "AYAPEL", "PLANETA RICA"). Limpia el nombre omitiendo el departamento si viene en formato "CORDOBA/AYAPEL" o "CORDOBA/ MONTERIA".
 
 ### REGLAS DE CONTROL:
 - Un comisionado puede tener múltiples filas (tramos) que representan diferentes fechas y destinos en el mismo documento. Agrúpalas todas bajo el mismo comisionado.
@@ -227,7 +227,7 @@ st.markdown("""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
             padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
   <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos — SIIF Nación</div>
-  
+  <div style="opacity:.75;font-size:12px">Análisis Directo con Gemini (Sin Extracciones Locales)</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -247,15 +247,18 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                 
             try:
                 raw = None
+                models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
+                st.write("🤖 Analizando documento...")
                 
-                # Intentamos con Gemini 2.5 Flash primero
-                st.write("🤖 Analizando documento con Gemini 2.5 Flash (Modelo Principal)...")
-                try:
-                    raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, "gemini-2.5-flash")
-                except Exception as e25:
-                    st.write(f"⚠️ Límite de consumo o error en Gemini 2.5: {str(e25)}")
-                    st.write("🔄 Reintentando automáticamente con Gemini 3.5 Flash (Modelo de Respaldo)...")
-                    raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, "gemini-3.5-flash")
+                for idx, model_name in enumerate(models):
+                    try:
+                        raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, model_name)
+                        break
+                    except Exception as e:
+                        if idx < len(models) - 1:
+                            st.write("🔄 Reintentando con otro modelo...")
+                        else:
+                            raise e
 
                 st.write("🧩 Parsea y construye el resultado final...")
                 data = parse_ai_response(raw)
