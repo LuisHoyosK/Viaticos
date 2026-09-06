@@ -192,24 +192,20 @@ def build_text(data):
 # ─────────────────────────────────────────────────────────────────────────────
 # LLAMADAS A GEMINI CON ARCHIVO NATIVO Y FALLBACK DE MODELO
 # ─────────────────────────────────────────────────────────────────────────────
-def call_gemini_native(prompt, pdf_path, model_name):
+# ─────────────────────────────────────────────────────────────────────────────
+# LLAMADAS A GEMINI CON ARCHIVO NATIVO Y FALLBACK DE MODELO
+# ─────────────────────────────────────────────────────────────────────────────
+def call_gemini_with_file(prompt, uploaded_file_obj, model_name):
     genai.configure(api_key=GEMINI_API_KEY.strip())
     model = genai.GenerativeModel(model_name)
-    
-    # Subir archivo directamente a la API de Gemini
-    uploaded_file = genai.upload_file(pdf_path, mime_type="application/pdf")
-    try:
-        resp = model.generate_content(
-            [prompt, uploaded_file],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                temperature=0.0
-            )
+    resp = model.generate_content(
+        [prompt, uploaded_file_obj],
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.0
         )
-        return resp.text.strip()
-    finally:
-        # Borrar el archivo cargado para liberar cuota de almacenamiento
-        uploaded_file.delete()
+    )
+    return resp.text.strip()
 
 def parse_ai_response(raw):
     """Limpia bloques ```json ... ``` y parsea JSON."""
@@ -248,17 +244,29 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
             try:
                 raw = None
                 models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
-                st.write("🤖 Analizando documento...")
                 
-                for idx, model_name in enumerate(models):
+                # Subir archivo UNA sola vez a la API de Gemini
+                st.write("🤖 Cargando documento en Gemini...")
+                genai.configure(api_key=GEMINI_API_KEY.strip())
+                gemini_file = genai.upload_file(tmp_path, mime_type="application/pdf")
+                
+                try:
+                    st.write("🤖 Analizando documento...")
+                    for idx, model_name in enumerate(models):
+                        try:
+                            raw = call_gemini_with_file(PROMPT_TEMPLATE, gemini_file, model_name)
+                            break
+                        except Exception as e:
+                            if idx < len(models) - 1:
+                                st.write("🔄 Reintentando con otro modelo...")
+                            else:
+                                raise e
+                finally:
+                    # Liberar el archivo cargado en Gemini
                     try:
-                        raw = call_gemini_native(PROMPT_TEMPLATE, tmp_path, model_name)
-                        break
-                    except Exception as e:
-                        if idx < len(models) - 1:
-                            st.write("🔄 Reintentando con otro modelo...")
-                        else:
-                            raise e
+                        gemini_file.delete()
+                    except Exception:
+                        pass
 
                 st.write("🧩 Parsea y construye el resultado final...")
                 data = parse_ai_response(raw)
