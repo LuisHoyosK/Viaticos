@@ -1,15 +1,16 @@
 import streamlit as st
-import os, json, tempfile, datetime, re
+import os, json, tempfile, datetime, re, time
 import google.generativeai as genai
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONFIGURACIÓN — API Keys (Streamlit Secrets)
+# CONFIGURACIÓN — API Keys & Modelo
 # ─────────────────────────────────────────────────────────────────────────────
 def get_secret(key):
     try: return st.secrets[key]
     except KeyError: return ""
 
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
+MODEL_NAME = "gemini-3.5-flash"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIACIONES DE MUNICIPIOS
@@ -190,12 +191,9 @@ def build_text(data):
     return '\n'.join(lines)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LLAMADAS A GEMINI CON ARCHIVO NATIVO Y FALLBACK DE MODELO
+# LLAMADAS A GEMINI CON ARCHIVO NATIVO
 # ─────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
-# LLAMADAS A GEMINI CON ARCHIVO NATIVO Y FALLBACK DE MODELO
-# ─────────────────────────────────────────────────────────────────────────────
-def call_gemini_with_file(prompt, uploaded_file_obj, model_name):
+def call_gemini_with_file(prompt, uploaded_file_obj, model_name=MODEL_NAME):
     genai.configure(api_key=GEMINI_API_KEY.strip())
     model = genai.GenerativeModel(model_name)
     resp = model.generate_content(
@@ -215,52 +213,70 @@ def parse_ai_response(raw):
     return json.loads(raw)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ESTADO DE SESIÓN (CONTADOR DIARIO Y COOLDOWN DE BOTÓN)
+# ─────────────────────────────────────────────────────────────────────────────
+current_utc_date = datetime.datetime.now(datetime.timezone.utc).date()
+if "daily_reset_date" not in st.session_state or st.session_state.daily_reset_date != current_utc_date:
+    st.session_state.daily_reset_date = current_utc_date
+    st.session_state.daily_count = 0
+
+if "last_run_time" not in st.session_state:
+    st.session_state.last_run_time = 0.0
+
+now = time.time()
+elapsed = now - st.session_state.last_run_time
+cooldown_remaining = max(0, int(60 - elapsed))
+is_cooldown = cooldown_remaining > 0
+
+# ─────────────────────────────────────────────────────────────────────────────
 # INTERFAZ STREAMLIT
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Extractor Viáticos", page_icon="📄", layout="centered")
 
-st.markdown("""
+st.markdown(f"""
 <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8);border-radius:12px;
-            padding:22px 28px;margin-bottom:24px;font-family:'Segoe UI',sans-serif;color:white">
+            padding:22px 28px;margin-bottom:16px;font-family:'Segoe UI',sans-serif;color:white">
   <div style="font-size:20px;font-weight:700;margin-bottom:4px">📄 Extractor de Viáticos — SIIF Nación</div>
-  <div style="opacity:.75;font-size:12px">Análisis Directo con Gemini (Sin Extracciones Locales)</div>
+
 </div>
 """, unsafe_allow_html=True)
 
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("📊 Resúmenes hoy", st.session_state.daily_count)
+with col2:
+    st.metric("🕒 Reset cuotas", "00:00 UTC (7:00 PM COT)")
+
 uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'])
 
-if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
+btn_label = f"⏳ Espera ({cooldown_remaining}s)" if is_cooldown else "⚡ Generar Resumen"
+
+if is_cooldown:
+    st.info(f"⏱️ **Cooldown activo:** Espera **{cooldown_remaining} segundos** antes de procesar otro documento para prevenir sobrepasar el límite de la API.")
+
+if st.button(btn_label, type="primary", use_container_width=True, disabled=is_cooldown):
     if uploaded_file is None:
         st.warning("⚠️ Selecciona un PDF primero.")
     elif not GEMINI_API_KEY:
         st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
     else:
+        st.session_state.last_run_time = time.time()
+        st.session_state.daily_count += 1
+        
         with st.status("Procesando documento...", expanded=True) as status:
-            st.write("⏳ Guardando archivo temporal...")
+            
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
                 tmp.write(uploaded_file.getvalue())
                 tmp_path = tmp.name
                 
             try:
-                raw = None
-                models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
                 
-                # Subir archivo UNA sola vez a la API de Gemini
-                st.write("🤖 Cargando documento en Gemini...")
                 genai.configure(api_key=GEMINI_API_KEY.strip())
                 gemini_file = genai.upload_file(tmp_path, mime_type="application/pdf")
                 
                 try:
-                    st.write("🤖 Analizando documento...")
-                    for idx, model_name in enumerate(models):
-                        try:
-                            raw = call_gemini_with_file(PROMPT_TEMPLATE, gemini_file, model_name)
-                            break
-                        except Exception as e:
-                            if idx < len(models) - 1:
-                                st.write("🔄 Reintentando con otro modelo...")
-                            else:
-                                raise e
+                    
+                    raw = call_gemini_with_file(PROMPT_TEMPLATE, gemini_file, MODEL_NAME)
                 finally:
                     # Liberar el archivo cargado en Gemini
                     try:
@@ -268,19 +284,19 @@ if st.button("⚡ Generar Resumen", type="primary", use_container_width=True):
                     except Exception:
                         pass
 
-                st.write("🧩 Parsea y construye el resultado final...")
+                
                 data = parse_ai_response(raw)
-                texto_final = build_text(data)
+                st.session_state.texto_final = build_text(data)
                 status.update(label="¡Extracción completada!", state="complete", expanded=False)
 
             except Exception as e:
                 status.update(label="Ocurrió un error en el procesamiento", state="error")
                 st.error(f"❌ Error final: {str(e)}")
-                texto_final = None
+                st.session_state.texto_final = None
             finally:
                 if os.path.exists(tmp_path):
                     os.unlink(tmp_path)
-                    
-        if texto_final:
-            st.markdown('<div style="font-family:sans-serif;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📋 Texto listo — Haz clic adentro y presiona Ctrl+A, Ctrl+C para copiar</div>', unsafe_allow_html=True)
-            st.text_area("Resultado", value=texto_final, height=300, label_visibility="collapsed")
+
+if st.session_state.get("texto_final"):
+    st.markdown('<div style="font-family:sans-serif;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:12px;margin-bottom:6px">📋 Texto listo — Haz clic adentro y presiona Ctrl+A, Ctrl+C para copiar</div>', unsafe_allow_html=True)
+    st.text_area("Resultado", value=st.session_state.texto_final, height=300, label_visibility="collapsed")
