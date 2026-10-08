@@ -249,6 +249,9 @@ uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'
 
 btn_label = f"⏳ Espera ({cooldown_remaining}s)" if is_cooldown else "⚡ Generar Resumen"
 
+if is_cooldown:
+    st.info(f" Espere **{cooldown_remaining} segundos** antes de procesar otro documento y recargue la pagina")
+
 if st.button(btn_label, type="primary", use_container_width=True, disabled=is_cooldown):
     if uploaded_file is None:
         st.warning("⚠️ Selecciona un PDF primero.")
