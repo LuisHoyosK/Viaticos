@@ -241,11 +241,10 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+col1 = st.columns(1)
 with col1:
     st.metric("📊 Resúmenes hoy", st.session_state.daily_count)
-with col2:
-    st.metric("🕒 Reset cuotas", "00:00 UTC (7:00 PM COT)")
+
 
 uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'])
 
