@@ -10,7 +10,7 @@ def get_secret(key):
     except KeyError: return ""
 
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
-MODEL_NAME = "gemini-3.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIACIONES DE MUNICIPIOS
