@@ -241,7 +241,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-col1 = st.columns(1)
+col1 = st.columns(2)
 with col1:
     st.metric("📊 Resúmenes hoy", st.session_state.daily_count)
 
