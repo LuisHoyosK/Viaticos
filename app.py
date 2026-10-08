@@ -241,9 +241,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("📊 Resúmenes hoy", st.session_state.daily_count)
+
 
 
 
@@ -251,14 +249,11 @@ uploaded_file = st.file_uploader("📂 Selecciona el documento PDF", type=['pdf'
 
 btn_label = f"⏳ Espera ({cooldown_remaining}s)" if is_cooldown else "⚡ Generar Resumen"
 
-if is_cooldown:
-    st.info(f"⏱️ **Cooldown activo:** Espera **{cooldown_remaining} segundos** antes de procesar otro documento para prevenir sobrepasar el límite de la API.")
-
 if st.button(btn_label, type="primary", use_container_width=True, disabled=is_cooldown):
     if uploaded_file is None:
         st.warning("⚠️ Selecciona un PDF primero.")
     elif not GEMINI_API_KEY:
-        st.error("⚠️ GEMINI_API_KEY no configurada. Agrégala en Configuración > Secrets.")
+        st.error("⚠️ Error Desconocido")
     else:
         st.session_state.last_run_time = time.time()
         st.session_state.daily_count += 1
@@ -291,7 +286,7 @@ if st.button(btn_label, type="primary", use_container_width=True, disabled=is_co
 
             except Exception as e:
                 status.update(label="Ocurrió un error en el procesamiento", state="error")
-                st.error(f"❌ Error final: {str(e)}")
+                
                 st.session_state.texto_final = None
             finally:
                 if os.path.exists(tmp_path):
